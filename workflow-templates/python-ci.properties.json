@@ -1,0 +1,11 @@
+{
+  "name": "Shards Python CI",
+  "description": "Lint, type-check when configured, and run pytest on a Python version matrix. Coverage fails the build only when a threshold is set.",
+  "iconName": "beaker",
+  "categories": ["Python", "Continuous integration"],
+  "filePatterns": [
+    "pyproject\\.toml$",
+    "requirements.*\\.txt$",
+    "setup\\.py$"
+  ]
+}

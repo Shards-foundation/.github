@@ -1,0 +1,87 @@
+# Blocks pull requests that introduce a dependency with a known vulnerability.
+# The job is skipped outside pull_request because the GitHub API compares the PR diff.
+# The aggregator stays green on that skip so a required check can include it.
+# warn-only is intentionally unset: a vulnerable dependency fails the check.
+
+name: Dependency review
+
+on:
+  workflow_call:
+    inputs:
+      check-name:
+        description: Stable check name for branch protection.
+        required: false
+        type: string
+        default: Dependency review
+      fail-on-severity:
+        description: Lowest severity that fails the check. Empty fails on any known vulnerability.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.repository }}-${{ github.ref }}-${{ inputs.check-name }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: dependency diff
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        if: inputs.fail-on-severity == ''
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          comment-summary-in-pr: never
+          show-openssf-scorecard: false
+          retry-on-snapshot-warnings: true
+          fail-on-scopes: runtime,development,unknown
+
+      - name: Review dependency changes at a severity floor
+        if: inputs.fail-on-severity != ''
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          comment-summary-in-pr: never
+          show-openssf-scorecard: false
+          retry-on-snapshot-warnings: true
+          fail-on-scopes: runtime,development,unknown
+          fail-on-severity: ${{ inputs.fail-on-severity }}
+
+  dependency-review:
+    name: ${{ inputs.check-name }}
+    needs: review
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: none
+    steps:
+      - name: Record the review result
+        env:
+          RESULT: ${{ needs.review.result }}
+        run: |
+          set -euo pipefail
+          case "$RESULT" in
+            success)
+              echo "Dependency review passed."
+              ;;
+            skipped)
+              echo "::notice title=Dependency review::Skipped because this run is not a pull_request. Vulnerable dependency diffs fail this check on pull requests."
+              ;;
+            *)
+              echo "::error::Dependency review failed"
+              exit 1
+              ;;
+          esac

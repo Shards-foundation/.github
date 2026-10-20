@@ -1,0 +1,492 @@
+# Reusable Python CI for Shards-foundation repositories.
+# Callers opt in with workflow_call. Actions are pinned to commit SHAs.
+# A failing lint, type check, or test fails the job. Nothing here uses
+# continue-on-error or pull_request_target.
+
+name: Python CI
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: 'JSON array of Python versions to test, for example ["3.11","3.12"].'
+        required: false
+        type: string
+        default: '["3.11","3.12","3.13"]'
+      coverage-threshold:
+        description: Fail if total coverage is under this percent. 0 disables the gate.
+        required: false
+        type: number
+        default: 0
+      coverage-packages:
+        description: Comma-separated pytest --cov package names. Empty measures the working directory when coverage is enabled.
+        required: false
+        type: string
+        default: ""
+      coverage-branch:
+        description: Pass --cov-branch when coverage is collected.
+        required: false
+        type: boolean
+        default: false
+      pytest-args:
+        description: Extra arguments appended to the default pytest command. Ignored when test-command is set.
+        required: false
+        type: string
+        default: ""
+      working-directory:
+        description: Directory that contains the Python project.
+        required: false
+        type: string
+        default: "."
+      install-command:
+        description: Shell snippet that installs dependencies. Empty installs from pyproject.toml and requirements files.
+        required: false
+        type: string
+        default: ""
+      lint-command:
+        description: Shell snippet for lint. Empty runs ruff and flake8 when their config is present.
+        required: false
+        type: string
+        default: ""
+      typecheck-command:
+        description: Shell snippet for the type check. Empty runs mypy when it is configured.
+        required: false
+        type: string
+        default: ""
+      test-command:
+        description: Shell snippet that replaces pytest, including any coverage gate. Empty runs pytest.
+        required: false
+        type: string
+        default: ""
+      extra-checks:
+        description: Shell snippet run after tests on every matrix leg. Empty skips.
+        required: false
+        type: string
+        default: ""
+      require-tests:
+        description: When true, pytest exit code 5 (no tests collected) fails the job.
+        required: false
+        type: boolean
+        default: false
+      check-name:
+        description: Stable check name for branch protection. Require this name, not each matrix leg.
+        required: false
+        type: string
+        default: Python CI
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-ci-${{ github.repository }}-${{ github.ref }}-${{ inputs.check-name }}-${{ inputs.working-directory }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    name: validate inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: none
+    outputs:
+      versions: ${{ steps.validate.outputs.versions }}
+    steps:
+      - name: Validate Python matrix and coverage threshold
+        id: validate
+        env:
+          PYTHON_VERSIONS: ${{ inputs.python-versions }}
+          COVERAGE_THRESHOLD: ${{ inputs.coverage-threshold }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+
+          def error(message: str) -> None:
+              print(f"::error::{message}")
+              sys.exit(1)
+
+          raw_versions = os.environ["PYTHON_VERSIONS"]
+          try:
+              versions = json.loads(raw_versions)
+          except json.JSONDecodeError as exc:
+              error(f"python-versions is not valid JSON: {exc}")
+          if not isinstance(versions, list) or not versions:
+              error('python-versions must be a non-empty JSON array, for example ["3.11","3.12"]')
+          if len(versions) > 8:
+              error("python-versions supports at most 8 entries")
+          pattern = re.compile(r"^(?:pypy)?[0-9]+(?:\.(?:[0-9]+|x)){1,2}$")
+          normalized: list[str] = []
+          for version in versions:
+              if not isinstance(version, str) or pattern.fullmatch(version.strip()) is None:
+                  error(f"invalid Python version {version!r}")
+              normalized.append(version.strip())
+
+          raw_threshold = os.environ["COVERAGE_THRESHOLD"].strip()
+          try:
+              threshold = float(raw_threshold)
+          except ValueError:
+              error(f"coverage-threshold is not a number: {raw_threshold}")
+          if threshold < 0 or threshold > 100:
+              error("coverage-threshold must be between 0 and 100; use 0 to disable the gate")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("versions=" + json.dumps(normalized) + "\n")
+          print("python-versions:", ", ".join(normalized))
+          print("coverage-threshold:", "off" if threshold == 0 else threshold)
+          PY
+
+  test:
+    name: python (${{ matrix.python-version }})
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(needs.validate.outputs.versions) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Detect dependency manifest for caching
+        id: pip-cache
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          manifest=""
+          for candidate in requirements.txt pyproject.toml requirements-dev.txt setup.py; do
+            if [ -f "$candidate" ]; then
+              manifest="$candidate"
+              break
+            fi
+          done
+          if [ -z "$manifest" ]; then
+            echo "cache=" >> "$GITHUB_OUTPUT"
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$WORKING_DIRECTORY" = "." ]; then
+            path="$manifest"
+          else
+            path="${WORKING_DIRECTORY%/}/$manifest"
+          fi
+          echo "cache=pip" >> "$GITHUB_OUTPUT"
+          echo "path=${path}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        if: steps.pip-cache.outputs.cache == 'pip'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: ${{ steps.pip-cache.outputs.path }}
+
+      - name: Set up Python ${{ matrix.python-version }} without a cache
+        if: steps.pip-cache.outputs.cache != 'pip'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        env:
+          INSTALL_COMMAND: ${{ inputs.install-command }}
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python - <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+          import os
+
+          def run(args: list[str]) -> None:
+              print("+", " ".join(args), flush=True)
+              subprocess.run(args, check=True)
+
+          def run_shell(script: str) -> None:
+              subprocess.run(["bash", "-euo", "pipefail", "-c", script], check=True)
+
+          install_command = os.environ.get("INSTALL_COMMAND", "")
+          if install_command.strip():
+              run_shell(install_command)
+              sys.exit(0)
+
+          pyproject = pathlib.Path("pyproject.toml")
+          text = pyproject.read_text(encoding="utf-8") if pyproject.is_file() else ""
+          text = text.replace("\r\n", "\n")
+          poetry = "[tool.poetry]" in text or "[tool.poetry." in text
+          project = f"\n{text}".find("\n[project]\n") != -1
+          build = "[build-system]" in text
+          setup_py = pathlib.Path("setup.py").is_file()
+          requirements = pathlib.Path("requirements.txt").is_file()
+
+          def has_dev(src: str) -> bool:
+              section = ""
+              for line in src.splitlines():
+                  stripped = line.strip()
+                  if stripped.startswith("[") and stripped.endswith("]"):
+                      section = stripped
+                      continue
+                  if section == "[project.optional-dependencies]":
+                      head = stripped.split("#", 1)[0]
+                      if head.startswith("dev") and "=" in head:
+                          return True
+              return False
+
+          if text and poetry and not project and not build:
+              print(
+                  "::error::Poetry projects are not auto-installed. Set install-command, "
+                  "for example: python -m pip install poetry && poetry install --no-interaction --no-ansi"
+              )
+              sys.exit(1)
+
+          if text and (project or build):
+              if has_dev(text):
+                  run([sys.executable, "-m", "pip", "install", "-e", ".[dev]"])
+              else:
+                  run([sys.executable, "-m", "pip", "install", "-e", "."])
+              if requirements:
+                  run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+          elif setup_py:
+              run([sys.executable, "-m", "pip", "install", "-e", "."])
+          elif requirements:
+              run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+          else:
+              print("::notice title=Python install::No dependency manifest. Only the test runner will be installed.")
+
+          dev_requirements = pathlib.Path("requirements-dev.txt")
+          if dev_requirements.is_file():
+              run([sys.executable, "-m", "pip", "install", "-r", "requirements-dev.txt"])
+          PY
+
+      - name: Lint
+        env:
+          LINT_COMMAND: ${{ inputs.lint-command }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import subprocess
+          import sys
+
+          def run(args: list[str]) -> None:
+              print("+", " ".join(args), flush=True)
+              subprocess.run(args, check=True)
+
+          def ensure(module: str, package: str) -> None:
+              probe = subprocess.run([sys.executable, "-c", f"import {module}"], check=False)
+              if probe.returncode != 0:
+                  run([sys.executable, "-m", "pip", "install", package])
+
+          def file_has(path: str, needle: str) -> bool:
+              file = pathlib.Path(path)
+              if not file.is_file():
+                  return False
+              for line in file.read_text(encoding="utf-8", errors="replace").splitlines():
+                  if line.strip().startswith(needle):
+                      return True
+              return False
+
+          command = os.environ.get("LINT_COMMAND", "")
+          if command.strip():
+              subprocess.run(["bash", "-euo", "pipefail", "-c", command], check=True)
+              sys.exit(0)
+
+          ran = False
+          if (
+              pathlib.Path("ruff.toml").is_file()
+              or pathlib.Path(".ruff.toml").is_file()
+              or file_has("pyproject.toml", "[tool.ruff")
+          ):
+              ensure("ruff", "ruff")
+              run([sys.executable, "-m", "ruff", "check", "."])
+              ran = True
+          flake8_configured = (
+              pathlib.Path(".flake8").is_file()
+              or file_has("setup.cfg", "[flake8]")
+              or file_has("tox.ini", "[flake8]")
+              or file_has("pyproject.toml", "[tool.flake8]")
+          )
+          if flake8_configured:
+              ensure("flake8", "flake8")
+              run([sys.executable, "-m", "flake8"])
+              ran = True
+          if not ran:
+              print(
+                  "::notice title=Python lint::No ruff or flake8 configuration and no lint-command. Lint was skipped."
+              )
+          PY
+
+      - name: Type check
+        env:
+          TYPECHECK_COMMAND: ${{ inputs.typecheck-command }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import subprocess
+          import sys
+
+          def file_has(path: str, needle: str) -> bool:
+              file = pathlib.Path(path)
+              if not file.is_file():
+                  return False
+              for line in file.read_text(encoding="utf-8", errors="replace").splitlines():
+                  if line.strip().startswith(needle):
+                      return True
+              return False
+
+          command = os.environ.get("TYPECHECK_COMMAND", "")
+          if command.strip():
+              subprocess.run(["bash", "-euo", "pipefail", "-c", command], check=True)
+              sys.exit(0)
+
+          configured = (
+              pathlib.Path("mypy.ini").is_file()
+              or pathlib.Path(".mypy.ini").is_file()
+              or file_has("pyproject.toml", "[tool.mypy")
+              or file_has("setup.cfg", "[mypy]")
+          )
+          if not configured:
+              print(
+                  "::notice title=Python type check::No mypy configuration and no typecheck-command. Type check was skipped."
+              )
+              sys.exit(0)
+          probe = subprocess.run([sys.executable, "-c", "import mypy"], check=False)
+          if probe.returncode != 0:
+              subprocess.run([sys.executable, "-m", "pip", "install", "mypy"], check=True)
+          print("+", sys.executable, "-m", "mypy", flush=True)
+          subprocess.run([sys.executable, "-m", "mypy"], check=True)
+          PY
+
+      - name: Test
+        env:
+          TEST_COMMAND: ${{ inputs.test-command }}
+          COVERAGE_THRESHOLD: ${{ inputs.coverage-threshold }}
+          COVERAGE_PACKAGES: ${{ inputs.coverage-packages }}
+          COVERAGE_BRANCH: ${{ inputs.coverage-branch }}
+          PYTEST_ARGS: ${{ inputs.pytest-args }}
+          REQUIRE_TESTS: ${{ inputs.require-tests }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import re
+          import shlex
+          import subprocess
+          import sys
+
+          def error(message: str) -> None:
+              print(f"::error::{message}")
+              sys.exit(1)
+
+          command = os.environ.get("TEST_COMMAND", "")
+          if command.strip():
+              subprocess.run(["bash", "-euo", "pipefail", "-c", command], check=True)
+              sys.exit(0)
+
+          probe = subprocess.run([sys.executable, "-c", "import pytest"], check=False)
+          if probe.returncode != 0:
+              subprocess.run([sys.executable, "-m", "pip", "install", "pytest"], check=True)
+
+          raw_threshold = os.environ.get("COVERAGE_THRESHOLD", "0").strip()
+          try:
+              threshold = float(raw_threshold)
+          except ValueError:
+              error(f"coverage-threshold is not a number: {raw_threshold}")
+          if threshold < 0 or threshold > 100:
+              error("coverage-threshold must be between 0 and 100")
+
+          packages = [part.strip() for part in os.environ.get("COVERAGE_PACKAGES", "").split(",")]
+          packages = [part for part in packages if part]
+          for package in packages:
+              if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", package) is None:
+                  error(f"invalid coverage package {package!r}")
+
+          args = [sys.executable, "-m", "pytest"]
+          if packages or threshold > 0:
+              probe = subprocess.run([sys.executable, "-c", "import pytest_cov"], check=False)
+              if probe.returncode != 0:
+                  subprocess.run([sys.executable, "-m", "pip", "install", "pytest-cov"], check=True)
+              if packages:
+                  args.extend(f"--cov={package}" for package in packages)
+              else:
+                  args.append("--cov=.")
+              args.extend(
+                  [
+                      "--cov-report=term-missing",
+                      "--cov-report=xml:coverage.xml",
+                      "--cov-report=json:coverage.json",
+                  ]
+              )
+              if os.environ.get("COVERAGE_BRANCH") == "true":
+                  args.append("--cov-branch")
+              if threshold > 0:
+                  rendered = str(int(threshold)) if threshold.is_integer() else str(threshold)
+                  args.append(f"--cov-fail-under={rendered}")
+
+          extra = os.environ.get("PYTEST_ARGS", "").strip()
+          if extra:
+              args.extend(shlex.split(extra))
+
+          print("+", " ".join(shlex.quote(arg) for arg in args), flush=True)
+          completed = subprocess.run(args, check=False)
+          if completed.returncode == 5 and os.environ.get("REQUIRE_TESTS") != "true":
+              print(
+                  "::notice title=Python tests::pytest collected no tests. "
+                  "Set require-tests to true to fail this case."
+              )
+              sys.exit(0)
+          sys.exit(completed.returncode)
+          PY
+
+      - name: Extra checks
+        if: inputs.extra-checks != ''
+        env:
+          EXTRA_CHECKS: ${{ inputs.extra-checks }}
+        run: |
+          set -euo pipefail
+          bash -euo pipefail -c "$EXTRA_CHECKS"
+
+  python-ci:
+    name: ${{ inputs.check-name }}
+    needs: [validate, test]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: none
+    steps:
+      - name: Require every Python version to pass
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          if [ "$VALIDATE_RESULT" != "success" ]; then
+            echo "::error::Python CI inputs were rejected"
+            exit 1
+          fi
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::Python CI matrix failed"
+            exit 1
+          fi
+          echo "Python CI passed."

@@ -1,0 +1,6 @@
+{
+  "name": "Shards release-please",
+  "description": "Opt in to release-please pull requests and changelogs. Do not add this unless the repository should cut releases.",
+  "iconName": "tag",
+  "categories": ["Automation", "Continuous integration"]
+}

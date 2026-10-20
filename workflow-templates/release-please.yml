@@ -1,0 +1,29 @@
+# Opt-in only. Adding this file makes release-please open release pull requests
+# on the default branch. Do not add it to a repository that should not release.
+
+name: Release Please
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: release-please-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release Please
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: Shards-foundation/.github/.github/workflows/release-please.yml@main
+    with:
+      release-type: simple

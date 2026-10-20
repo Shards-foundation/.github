@@ -1,0 +1,19 @@
+name: Dependency review
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    permissions:
+      contents: read
+    uses: Shards-foundation/.github/.github/workflows/dependency-review.yml@main

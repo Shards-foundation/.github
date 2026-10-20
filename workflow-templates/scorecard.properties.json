@@ -1,0 +1,6 @@
+{
+  "name": "Shards OpenSSF Scorecard",
+  "description": "Run OpenSSF Scorecard and publish the SARIF result. A low score is reported and does not fail CI.",
+  "iconName": "checklist",
+  "categories": ["Security"]
+}

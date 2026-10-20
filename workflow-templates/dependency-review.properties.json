@@ -1,0 +1,6 @@
+{
+  "name": "Shards dependency review",
+  "description": "Fail a pull request that adds a dependency with a known vulnerability. Runtime, development, and unknown scopes are all in scope.",
+  "iconName": "package",
+  "categories": ["Security", "Dependency management"]
+}

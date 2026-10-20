@@ -1,0 +1,19 @@
+{
+  "name": "ci-fixture-pnpm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "node scripts/lint.mjs",
+    "typecheck": "tsc --noEmit --pretty false",
+    "build": "tsc --pretty false",
+    "test": "tsc --pretty false && node --test test/index.test.js"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "packageManager": "pnpm@10.4.1"
+}
