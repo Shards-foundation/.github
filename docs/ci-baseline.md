@@ -80,7 +80,13 @@ Outside a pull request the review job is skipped. The stable check still succeed
 
 `fail-on-severity` may be `low`, `moderate`, `high`, or `critical`. Leave it empty to keep the action default (`low`).
 
-The action needs the dependency graph. Enabling that is an owner setting, described below.
+The action needs the dependency graph. Before it runs, the workflow calls `GET /repos/{owner}/{repo}/dependency-graph/compare/{base}...{head}`.
+
+- HTTP 200 means the graph can be compared. The action then runs, and a new dependency with a known vulnerability fails the job.
+- HTTP 403 with message `Forbidden` and the dependency-review documentation URL, on a pull request that is not from a fork, means the dependency graph is off. The job records a notice and the stable check succeeds. That comparison is **unverified** until an owner enables the dependency graph. The same notice is used when the body explicitly says the dependency graph or Advanced Security is disabled.
+- A fork pull request that receives HTTP 403 still fails. Skipping it would hide a vulnerable dependency the API refused to compare.
+- `Resource not accessible by integration` fails. So does any other status, including HTTP 404 when a snapshot is missing.
+- `continue-on-error` is not set. The preflight is what keeps a disabled graph from failing the check; a vulnerability still fails the action step.
 
 ### CodeQL
 
@@ -89,6 +95,8 @@ The action needs the dependency graph. Enabling that is an owner setting, descri
 Interpreted languages use `build-mode: none`. Other languages use `autobuild`. `queries` is omitted unless you set it, so the default query suite is not replaced by an empty list. `security-extended` is an example value.
 
 The SARIF file is parsed in the job. Any result fails the build, whether or not GitHub code scanning is enabled. When code scanning is enabled, the action uploads the SARIF. When it is not, the job records a notice, still fails on findings, and uploads the SARIF as a workflow artifact. The database is not uploaded.
+
+Code scanning is treated as enabled on HTTP 200, and on HTTP 404 whose message is exactly `no analysis found` (the feature is on, and nothing has been uploaded yet). It is treated as disabled only when a 403 or 404 body says code scanning, Code Security, or Advanced Security is not enabled. `Resource not accessible by integration` and any other status fail the job instead of being reported as disabled. Scorecard uses the same classification.
 
 This is an advanced CodeQL setup. Do not also turn on the repository's default CodeQL setup.
 
@@ -324,13 +332,13 @@ This pull request does not call the settings API and does not change branch prot
    - Require the status checks the repo actually adopted (`Python CI / Python CI`, `Node CI / Node CI`, `Gitleaks / Gitleaks`, `Dependency review / Dependency review`, `CodeQL / CodeQL`, `OpenSSF Scorecard / OpenSSF Scorecard`). Use the name from the first run.
    - Block force pushes. Prefer no bypass, including for administrators, on this `.github` repo.
 2. **Secret scanning and push protection.** Org settings → Code security. Enable secret scanning for public repositories, then enable push protection. Private repositories need GitHub Code Security (or Advanced Security) licensed and enabled. The gitleaks workflow does not replace that; it runs even when the product switch is off.
-3. **Dependency graph, Dependabot alerts, and Dependabot security updates.** Enable them for the org's repositories. Copy `docs/templates/dependabot.yml` into each repo and trim it. Dependency review fails until the dependency graph can build a snapshot for the pull request.
+3. **Dependency graph, Dependabot alerts, and Dependabot security updates.** Enable them for the org's repositories. Copy `docs/templates/dependabot.yml` into each repo and trim it. Until the dependency graph is enabled, dependency review records a notice and does not compare dependencies, so that result is unverified. After it is enabled, a pull request that adds a known-vulnerable dependency fails. A missing snapshot (HTTP 404) still fails the check.
 4. **Actions permissions.**
    - Allow actions and reusable workflows from `Shards-foundation` and from GitHub, and allow third-party actions only when they are pinned to a full commit SHA. Turn on the org policy that requires SHA pinning if it is available in the settings UI.
    - Default `GITHUB_TOKEN` permission: read repository contents. These workflows raise that per job when they must.
    - Keep the rule that workflows from outside collaborators need approval. Do not switch callers to `pull_request_target` to skip it.
    - For Release Please, allow Actions to open pull requests if the org currently blocks that. A token created by `GITHUB_TOKEN` will not trigger the CI workflows on the release PR. Add a separate token only if you need those workflows, and store it as an org or repo secret yourself.
-5. **Code scanning.** Enable it for repositories that should show CodeQL and Scorecard in the Security tab. Disable the **default** CodeQL setup on any repo that uses `codeql.yml`, or the two setups will fight. Until code scanning is enabled, both workflows still analyze and still fail when CodeQL reports a result; they do not upload into the Security tab.
+5. **Code scanning.** Enable it for repositories that should show CodeQL and Scorecard in the Security tab. Disable the **default** CodeQL setup on any repo that uses `codeql.yml`, or the two setups will fight. Until code scanning is enabled, both workflows still analyze and still fail when CodeQL reports a result; they do not upload into the Security tab. A 404 of `no analysis found` is an enabled-but-empty repository, and the workflows upload. A token error is not treated as "feature off".
 6. **Private Scorecard.** If a private repo's Scorecard job cannot read the repo with `GITHUB_TOKEN`, create a read-only PAT and pass it as `secrets.repo-token`. Do not commit it.
 
 ## What this baseline will not do
@@ -339,6 +347,7 @@ This pull request does not call the settings API and does not change branch prot
 - It will not use `pull_request_target`.
 - It will not publish a package, deploy Pages, or run Kernel's old `safety check || true` vulnerability scan. Publishing stays a repo-specific workflow with `id-token: write` and an environment.
 - It will not fail a repository for a low Scorecard score.
+- It will not fail dependency review only because the dependency graph switch is off. Once that API returns a comparison, a known vulnerability fails the check.
 - It will not open releases unless that repository adds the Release Please caller.
 - It will not edit other repositories or org settings.
 

@@ -26,6 +26,21 @@ if ! grep -q 'cov-fail-under' "${root}/.github/workflows/python-ci.yml"; then
   exit 1
 fi
 
+for path in codeql.yml scorecard.yml; do
+  if ! grep -Fq 'no analysis found' "${root}/.github/workflows/${path}"; then
+    echo "::error::${path} does not treat HTTP 404 no analysis found as code scanning enabled"
+    exit 1
+  fi
+done
+if ! grep -Fq 'dependency-graph/dependency-review' "${root}/.github/workflows/dependency-review.yml"; then
+  echo "::error::dependency review does not preflight the compare API"
+  exit 1
+fi
+if grep -Eq 'continue-on-error:[[:space:]]*true' "${root}/.github/workflows/dependency-review.yml"; then
+  echo "::error::dependency review uses continue-on-error"
+  exit 1
+fi
+
 install_gitleaks() {
   local version="8.30.1"
   local asset sha
