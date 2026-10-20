@@ -1,0 +1,81 @@
+# Opt-in release pull requests and changelogs via release-please.
+# This file has no push trigger. A repository runs it only by calling it.
+# dry-run skips pull requests, labels, and GitHub releases so CI can exercise
+# the action without publishing.
+
+name: Release Please
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: When true, do not open pull requests, label them, or publish GitHub releases.
+        required: false
+        type: boolean
+        default: false
+      release-type:
+        description: release-please strategy, for example simple, python, or node. Pass an empty string when config-file is set.
+        required: false
+        type: string
+        default: simple
+      config-file:
+        description: Path to release-please-config.json. Empty uses release-type without a manifest.
+        required: false
+        type: string
+        default: ""
+      manifest-file:
+        description: Path to the release-please manifest. Empty uses the action default when a config file is set.
+        required: false
+        type: string
+        default: ""
+      target-branch:
+        description: Branch that receives the release pull request. Empty lets release-please use the default branch.
+        required: false
+        type: string
+        default: ""
+      check-name:
+        description: Stable check name for branch protection.
+        required: false
+        type: string
+        default: Release Please
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: release-please-${{ github.repository }}-${{ github.ref }}-${{ inputs.check-name }}
+  cancel-in-progress: ${{ inputs.dry-run }}
+
+jobs:
+  release-please:
+    name: ${{ inputs.check-name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Release Please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          release-type: ${{ inputs.release-type }}
+          config-file: ${{ inputs.config-file }}
+          manifest-file: ${{ inputs.manifest-file }}
+          target-branch: ${{ inputs.target-branch }}
+          skip-github-release: ${{ inputs.dry-run }}
+          skip-github-pull-request: ${{ inputs.dry-run }}
+          skip-labeling: ${{ inputs.dry-run }}
+
+      - name: Describe dry run
+        if: inputs.dry-run
+        run: |
+          set -euo pipefail
+          echo "dry-run: release-please was not allowed to open pull requests, add labels, or publish releases."

@@ -1,0 +1,50 @@
+# One caller for secret scanning, dependency review, CodeQL, and Scorecard.
+# Use this, or add the individual templates, but do not run both or the checks duplicate.
+
+name: Security baseline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Gitleaks
+    permissions:
+      contents: read
+    uses: Shards-foundation/.github/.github/workflows/gitleaks.yml@main
+
+  dependency-review:
+    name: Dependency review
+    permissions:
+      contents: read
+    uses: Shards-foundation/.github/.github/workflows/dependency-review.yml@main
+
+  codeql:
+    name: CodeQL
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      packages: read
+    uses: Shards-foundation/.github/.github/workflows/codeql.yml@main
+
+  scorecard:
+    name: OpenSSF Scorecard
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      security-events: write
+    uses: Shards-foundation/.github/.github/workflows/scorecard.yml@main

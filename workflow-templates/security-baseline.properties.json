@@ -1,0 +1,6 @@
+{
+  "name": "Shards security baseline",
+  "description": "Add gitleaks, dependency review, CodeQL, and OpenSSF Scorecard in one workflow. Do not also add the individual security templates.",
+  "iconName": "shield",
+  "categories": ["Security", "Code scanning"]
+}

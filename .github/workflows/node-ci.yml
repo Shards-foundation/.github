@@ -1,0 +1,448 @@
+# Reusable Node.js / TypeScript CI for Shards-foundation repositories.
+# pnpm is selected when packageManager or pnpm-lock.yaml says so; otherwise npm.
+# A lint, typecheck, test, or build script that exists and fails fails the job.
+
+name: Node CI
+
+on:
+  workflow_call:
+    inputs:
+      node-versions:
+        description: 'JSON array of Node.js versions to test, for example ["20","22"].'
+        required: false
+        type: string
+        default: '["20","22"]'
+      package-manager:
+        description: npm, pnpm, or auto. auto reads packageManager and then the lockfile.
+        required: false
+        type: string
+        default: auto
+      pnpm-version:
+        description: pnpm version used when the package manager is pnpm. Empty reads packageManager, or uses 10.4.1.
+        required: false
+        type: string
+        default: ""
+      working-directory:
+        description: Directory that contains package.json.
+        required: false
+        type: string
+        default: "."
+      install-command:
+        description: Shell snippet that installs dependencies. Empty uses npm ci or pnpm install --frozen-lockfile when a lockfile exists.
+        required: false
+        type: string
+        default: ""
+      lint-command:
+        description: Shell snippet for lint. Empty runs the lint script when package.json defines one.
+        required: false
+        type: string
+        default: ""
+      typecheck-command:
+        description: Shell snippet for the type check. Empty runs typecheck, type-check, or tsc --noEmit when TypeScript is set up.
+        required: false
+        type: string
+        default: ""
+      test-command:
+        description: Shell snippet for tests. Empty runs the test script when one is defined.
+        required: false
+        type: string
+        default: ""
+      build-command:
+        description: Shell snippet for the build. Empty runs the build script when one is defined.
+        required: false
+        type: string
+        default: ""
+      extra-checks:
+        description: Shell snippet run after tests on every matrix leg. Empty skips.
+        required: false
+        type: string
+        default: ""
+      require-tests:
+        description: When true, a missing test script fails the job. A test script that fails always fails the job.
+        required: false
+        type: boolean
+        default: false
+      check-name:
+        description: Stable check name for branch protection. Require this name, not each matrix leg.
+        required: false
+        type: string
+        default: Node CI
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-ci-${{ github.repository }}-${{ github.ref }}-${{ inputs.check-name }}-${{ inputs.working-directory }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    name: validate inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: none
+    outputs:
+      versions: ${{ steps.validate.outputs.versions }}
+    steps:
+      - name: Validate Node matrix
+        id: validate
+        env:
+          NODE_VERSIONS: ${{ inputs.node-versions }}
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+
+          def error(message: str) -> None:
+              print(f"::error::{message}")
+              sys.exit(1)
+
+          manager = os.environ["PACKAGE_MANAGER"].strip()
+          if manager not in {"auto", "npm", "pnpm"}:
+              error("package-manager must be auto, npm, or pnpm")
+
+          try:
+              versions = json.loads(os.environ["NODE_VERSIONS"])
+          except json.JSONDecodeError as exc:
+              error(f"node-versions is not valid JSON: {exc}")
+          if not isinstance(versions, list) or not versions:
+              error('node-versions must be a non-empty JSON array, for example ["20","22"]')
+          if len(versions) > 8:
+              error("node-versions supports at most 8 entries")
+          pattern = re.compile(r"^[0-9]+(?:\.[0-9]+){0,2}$|^lts/[A-Za-z0-9._-]+$")
+          normalized: list[str] = []
+          for version in versions:
+              if not isinstance(version, str) or pattern.fullmatch(version.strip()) is None:
+                  error(f"invalid Node.js version {version!r}")
+              normalized.append(version.strip())
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("versions=" + json.dumps(normalized) + "\n")
+          print("node-versions:", ", ".join(normalized))
+          print("package-manager:", manager)
+          PY
+
+  test:
+    name: node (${{ matrix.node-version }})
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ${{ fromJSON(needs.validate.outputs.versions) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Detect package manager
+        id: detect
+        env:
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+          PNPM_VERSION: ${{ inputs.pnpm-version }}
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          def error(message: str) -> None:
+              print(f"::error::{message}")
+              raise SystemExit(1)
+
+          requested = os.environ["PACKAGE_MANAGER"].strip()
+          if requested not in {"auto", "npm", "pnpm"}:
+              error("package-manager must be auto, npm, or pnpm")
+          package_json = Path("package.json")
+          if not package_json.is_file():
+              error("No package.json in the working directory")
+          manifest = json.loads(package_json.read_text(encoding="utf-8"))
+          field = str(manifest.get("packageManager") or "")
+          has_pnpm = Path("pnpm-lock.yaml").is_file()
+          has_npm = Path("package-lock.json").is_file()
+          has_yarn = Path("yarn.lock").is_file()
+
+          if requested == "npm":
+              manager = "npm"
+          elif requested == "pnpm":
+              manager = "pnpm"
+          elif field.startswith("pnpm@"):
+              manager = "pnpm"
+          elif field.startswith("npm@"):
+              manager = "npm"
+          elif has_pnpm and not has_npm:
+              manager = "pnpm"
+          elif has_npm and not has_pnpm:
+              manager = "npm"
+          elif has_pnpm and has_npm:
+              error("Both package-lock.json and pnpm-lock.yaml exist. Set package-manager to npm or pnpm.")
+          elif has_yarn:
+              error("yarn.lock is not supported. Migrate to npm or pnpm, or set install-command.")
+          else:
+              manager = "npm"
+
+          pnpm_version = os.environ.get("PNPM_VERSION", "").strip()
+          if manager == "pnpm" and not pnpm_version:
+              match = re.fullmatch(r"pnpm@(\d+\.\d+\.\d+)(?:\+.+)?", field)
+              pnpm_version = match.group(1) if match else "10.4.1"
+          if manager == "pnpm" and re.fullmatch(r"\d+(?:\.\d+){0,2}", pnpm_version) is None:
+              error(f"invalid pnpm-version {pnpm_version!r}")
+
+          working_directory = os.environ["WORKING_DIRECTORY"]
+          prefix = "" if working_directory in {"", "."} else working_directory.rstrip("/") + "/"
+          cache = ""
+          lockfile = ""
+          if manager == "pnpm" and has_pnpm:
+              cache = "pnpm"
+              lockfile = prefix + "pnpm-lock.yaml"
+          elif manager == "npm" and has_npm:
+              cache = "npm"
+              lockfile = prefix + "package-lock.json"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"manager={manager}\n")
+              handle.write(f"pnpm-version={pnpm_version}\n")
+              handle.write(f"cache={cache}\n")
+              handle.write(f"lockfile={lockfile}\n")
+          print(f"package manager: {manager}")
+          if manager == "pnpm":
+              print(f"pnpm version: {pnpm_version}")
+          if not cache:
+              print(
+                  "::notice title=Node install::No lockfile. The install will not use npm ci or pnpm --frozen-lockfile. Commit a lockfile to make it reproducible."
+              )
+          PY
+
+      - name: Set up pnpm
+        if: steps.detect.outputs.manager == 'pnpm'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ steps.detect.outputs.pnpm-version }}
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        if: steps.detect.outputs.cache != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: ${{ steps.detect.outputs.cache }}
+          cache-dependency-path: ${{ steps.detect.outputs.lockfile }}
+
+      - name: Set up Node.js ${{ matrix.node-version }} without a cache
+        if: steps.detect.outputs.cache == ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        env:
+          INSTALL_COMMAND: ${{ inputs.install-command }}
+          MANAGER: ${{ steps.detect.outputs.manager }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INSTALL_COMMAND" ]; then
+            bash -euo pipefail -c "$INSTALL_COMMAND"
+            exit 0
+          fi
+          if [ "$MANAGER" = "pnpm" ]; then
+            if [ -f pnpm-lock.yaml ]; then
+              pnpm install --frozen-lockfile
+            else
+              pnpm install
+            fi
+          elif [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Lint
+        env:
+          LINT_COMMAND: ${{ inputs.lint-command }}
+          MANAGER: ${{ steps.detect.outputs.manager }}
+        run: |
+          set -euo pipefail
+          if [ -n "$LINT_COMMAND" ]; then
+            bash -euo pipefail -c "$LINT_COMMAND"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          manifest = json.loads(open("package.json", encoding="utf-8").read())
+          scripts = manifest.get("scripts") or {}
+          if "lint" not in scripts:
+              print("::notice title=Node lint::No lint script and no lint-command. Lint was skipped.")
+              sys.exit(0)
+          manager = os.environ["MANAGER"]
+          command = ["pnpm", "run", "lint"] if manager == "pnpm" else ["npm", "run", "lint"]
+          print("+", " ".join(command), flush=True)
+          subprocess.run(command, check=True)
+          PY
+
+      - name: Type check
+        env:
+          TYPECHECK_COMMAND: ${{ inputs.typecheck-command }}
+          MANAGER: ${{ steps.detect.outputs.manager }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TYPECHECK_COMMAND" ]; then
+            bash -euo pipefail -c "$TYPECHECK_COMMAND"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          manifest = json.loads(Path("package.json").read_text(encoding="utf-8"))
+          scripts = manifest.get("scripts") or {}
+          deps = {}
+          deps.update(manifest.get("dependencies") or {})
+          deps.update(manifest.get("devDependencies") or {})
+          manager = os.environ["MANAGER"]
+
+          def run_script(name: str) -> None:
+              command = ["pnpm", "run", name] if manager == "pnpm" else ["npm", "run", name]
+              print("+", " ".join(command), flush=True)
+              subprocess.run(command, check=True)
+
+          if "typecheck" in scripts:
+              run_script("typecheck")
+              sys.exit(0)
+          if "type-check" in scripts:
+              run_script("type-check")
+              sys.exit(0)
+          if Path("tsconfig.json").is_file() and "typescript" in deps:
+              if manager == "pnpm":
+                  command = ["pnpm", "exec", "tsc", "--noEmit"]
+              else:
+                  command = ["npx", "--no-install", "tsc", "--noEmit"]
+              print("+", " ".join(command), flush=True)
+              subprocess.run(command, check=True)
+              sys.exit(0)
+          print(
+              "::notice title=Node type check::No typecheck script, TypeScript project, or typecheck-command. Type check was skipped."
+          )
+          PY
+
+      - name: Build
+        env:
+          BUILD_COMMAND: ${{ inputs.build-command }}
+          MANAGER: ${{ steps.detect.outputs.manager }}
+        run: |
+          set -euo pipefail
+          if [ -n "$BUILD_COMMAND" ]; then
+            bash -euo pipefail -c "$BUILD_COMMAND"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          manifest = json.loads(open("package.json", encoding="utf-8").read())
+          scripts = manifest.get("scripts") or {}
+          if "build" not in scripts:
+              print("::notice title=Node build::No build script and no build-command. Build was skipped.")
+              sys.exit(0)
+          manager = os.environ["MANAGER"]
+          command = ["pnpm", "run", "build"] if manager == "pnpm" else ["npm", "run", "build"]
+          print("+", " ".join(command), flush=True)
+          subprocess.run(command, check=True)
+          PY
+
+      - name: Test
+        env:
+          TEST_COMMAND: ${{ inputs.test-command }}
+          MANAGER: ${{ steps.detect.outputs.manager }}
+          REQUIRE_TESTS: ${{ inputs.require-tests }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TEST_COMMAND" ]; then
+            bash -euo pipefail -c "$TEST_COMMAND"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          manifest = json.loads(open("package.json", encoding="utf-8").read())
+          scripts = manifest.get("scripts") or {}
+          value = scripts.get("test", "")
+          normalized = " ".join(str(value).split())
+          placeholders = {
+              'echo "Error: no test specified" && exit 1',
+              "echo 'Error: no test specified' && exit 1",
+          }
+          present = bool(value) and normalized not in placeholders
+          if not present:
+              if os.environ.get("REQUIRE_TESTS") == "true":
+                  print("::error::No test script. Add one, or set require-tests to false for a scaffold with no tests.")
+                  sys.exit(1)
+              print("::notice title=Node tests::No test script. Tests were skipped.")
+              sys.exit(0)
+          manager = os.environ["MANAGER"]
+          command = ["pnpm", "run", "test"] if manager == "pnpm" else ["npm", "run", "test"]
+          print("+", " ".join(command), flush=True)
+          subprocess.run(command, check=True)
+          PY
+
+      - name: Extra checks
+        if: inputs.extra-checks != ''
+        env:
+          EXTRA_CHECKS: ${{ inputs.extra-checks }}
+        run: |
+          set -euo pipefail
+          bash -euo pipefail -c "$EXTRA_CHECKS"
+
+  node-ci:
+    name: ${{ inputs.check-name }}
+    needs: [validate, test]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: none
+    steps:
+      - name: Require every Node.js version to pass
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          if [ "$VALIDATE_RESULT" != "success" ]; then
+            echo "::error::Node CI inputs were rejected"
+            exit 1
+          fi
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::Node CI matrix failed"
+            exit 1
+          fi
+          echo "Node CI passed."

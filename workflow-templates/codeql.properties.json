@@ -1,0 +1,6 @@
+{
+  "name": "Shards CodeQL",
+  "description": "Run CodeQL for Python and JavaScript/TypeScript found in the repo. Findings fail the check. Uses pull_request, not pull_request_target.",
+  "iconName": "shield",
+  "categories": ["Code scanning", "Security"]
+}

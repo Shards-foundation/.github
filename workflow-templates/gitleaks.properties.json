@@ -1,0 +1,6 @@
+{
+  "name": "Shards secret scan",
+  "description": "Scan the full git history with gitleaks. Findings fail the check and are redacted in the log.",
+  "iconName": "lock",
+  "categories": ["Security"]
+}

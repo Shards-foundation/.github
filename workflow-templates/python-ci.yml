@@ -1,0 +1,28 @@
+# Caller for the org Python CI workflow.
+# Edit python-versions and coverage-threshold for the repository.
+# coverage-threshold: 0 leaves the coverage gate off.
+
+name: Python CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-ci:
+    name: Python CI
+    permissions:
+      contents: read
+    uses: Shards-foundation/.github/.github/workflows/python-ci.yml@main
+    with:
+      python-versions: '["3.11","3.12","3.13"]'
+      coverage-threshold: 0

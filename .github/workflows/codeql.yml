@@ -1,0 +1,289 @@
+# CodeQL for the languages in the repo, or the languages input when it is set.
+# The analysis fails the job when the SARIF contains results. Upload to the
+# Security tab happens when code scanning is enabled. HTTP 404 with message
+# "no analysis found" means the feature is on and nothing has been uploaded yet.
+# Keep that classification in sync with scorecard.yml.
+
+name: CodeQL
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: JSON array of CodeQL language ids. Empty auto-detects Python and JavaScript/TypeScript.
+        required: false
+        type: string
+        default: ""
+      queries:
+        description: Optional CodeQL queries value, for example security-extended. Empty uses the default suite.
+        required: false
+        type: string
+        default: ""
+      check-name:
+        description: Stable check name for branch protection. Require this name, not each language leg.
+        required: false
+        type: string
+        default: CodeQL
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+  packages: read
+
+concurrency:
+  group: codeql-${{ github.repository }}-${{ github.ref }}-${{ inputs.check-name }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: detect languages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      languages: ${{ steps.detect.outputs.languages }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve languages
+        id: detect
+        env:
+          LANGUAGES: ${{ inputs.languages }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          def error(message: str) -> None:
+              print(f"::error::{message}")
+              sys.exit(1)
+
+          raw = os.environ.get("LANGUAGES", "").strip()
+          if raw:
+              try:
+                  languages = json.loads(raw)
+              except json.JSONDecodeError as exc:
+                  error(f"languages is not valid JSON: {exc}")
+              if not isinstance(languages, list):
+                  error("languages must be a JSON array of CodeQL language ids")
+          else:
+              listed = subprocess.run(
+                  ["git", "ls-files", "-z", "--", "*.py", "*.js", "*.jsx", "*.ts", "*.tsx", "*.mjs", "*.cjs"],
+                  check=True,
+                  capture_output=True,
+              ).stdout
+              paths = [item for item in listed.split(b"\0") if item]
+              languages = []
+              if any(path.endswith(b".py") for path in paths):
+                  languages.append("python")
+              if any(path.endswith((b".js", b".jsx", b".ts", b".tsx", b".mjs", b".cjs")) for path in paths):
+                  languages.append("javascript-typescript")
+              if not languages:
+                  print(
+                      "::notice title=CodeQL::No Python or JavaScript/TypeScript files detected. "
+                      "Pass languages to analyze another language."
+                  )
+
+          pattern = re.compile(r"^[a-zA-Z][a-zA-Z0-9_+-]*$")
+          normalized: list[str] = []
+          for language in languages:
+              if not isinstance(language, str) or pattern.fullmatch(language) is None:
+                  error(f"invalid CodeQL language {language!r}")
+              normalized.append(language)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("languages=" + json.dumps(normalized) + "\n")
+          print("languages:", ", ".join(normalized) if normalized else "(none)")
+          PY
+
+  analyze:
+    name: ${{ matrix.language }}
+    needs: detect
+    if: needs.detect.outputs.languages != '[]' && needs.detect.outputs.languages != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.detect.outputs.languages) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        if: inputs.queries == ''
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ (matrix.language == 'python' || matrix.language == 'javascript-typescript' || matrix.language == 'javascript' || matrix.language == 'typescript' || matrix.language == 'ruby' || matrix.language == 'actions') && 'none' || 'autobuild' }}
+
+      - name: Initialize CodeQL with extra queries
+        if: inputs.queries != ''
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ (matrix.language == 'python' || matrix.language == 'javascript-typescript' || matrix.language == 'javascript' || matrix.language == 'typescript' || matrix.language == 'ruby' || matrix.language == 'actions') && 'none' || 'autobuild' }}
+          queries: ${{ inputs.queries }}
+
+      - name: Check whether code scanning is enabled
+        id: features
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NOTICE_DISABLED: Code scanning is not enabled, so results will not be uploaded to the Security tab. Findings in this job still fail the build.
+          NOTICE_EMPTY: Code scanning is enabled and has no analyses yet. This job will upload its SARIF.
+        run: |
+          set -euo pipefail
+          body="${RUNNER_TEMP}/code-scanning-body.txt"
+          status="$(curl -sS -o "$body" -w "%{http_code}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/code-scanning/alerts?per_page=1")"
+          python3 - "$status" "$body" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          status = sys.argv[1]
+          raw = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
+          try:
+              payload = json.loads(raw) if raw.strip() else {}
+          except json.JSONDecodeError:
+              payload = {}
+          message = str(payload.get("message") or "") if isinstance(payload, dict) else ""
+          lower = message.lower()
+          out = pathlib.Path(os.environ["GITHUB_OUTPUT"])
+
+          def show(text):
+              safe = text.replace("\r", " ").replace("\n", " ").replace("::", ": :")
+              print(safe[:2000])
+
+          def set_enabled(value, notice=None):
+              with out.open("a", encoding="utf-8") as handle:
+                  handle.write(f"enabled={value}\n")
+              if notice:
+                  print(f"::notice title=Code scanning::{notice}")
+
+          if "resource not accessible by integration" in lower:
+              print(f"::error::Code scanning API rejected the token (HTTP {status}).")
+              show(raw)
+              sys.exit(1)
+          if status == "200" or (status == "404" and lower == "no analysis found"):
+              notice = os.environ["NOTICE_EMPTY"] if status == "404" else None
+              set_enabled("true", notice)
+              sys.exit(0)
+          disabled = (
+              "code scanning is not enabled",
+              "code security must be enabled",
+              "advanced security",
+              "not enabled for this repository",
+          )
+          if status in {"403", "404"} and any(marker in lower for marker in disabled):
+              set_enabled("false", os.environ["NOTICE_DISABLED"])
+              sys.exit(0)
+          print(f"::error::Could not tell whether code scanning is enabled (HTTP {status}).")
+          show(raw)
+          sys.exit(1)
+          PY
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          category: codeql-${{ matrix.language }}
+          output: ${{ github.workspace }}/codeql-results
+          upload: ${{ steps.features.outputs.enabled == 'true' && 'always' || 'never' }}
+          upload-database: false
+
+      - name: Fail on CodeQL findings
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path("codeql-results")
+          files = sorted(root.rglob("*.sarif")) if root.exists() else []
+          if not files:
+              print("::error::CodeQL did not write a SARIF file")
+              sys.exit(1)
+          failed = False
+          for path in files:
+              data = json.loads(path.read_text(encoding="utf-8"))
+              results = []
+              for run in data.get("runs") or []:
+                  results.extend(run.get("results") or [])
+              print(f"{path}: {len(results)} result(s)")
+              for result in results:
+                  failed = True
+                  message = ((result.get("message") or {}).get("text") or "").replace("\n", " ")
+                  rule = result.get("ruleId") or "codeql"
+                  level = result.get("level") or "warning"
+                  locations = result.get("locations") or []
+                  where = ""
+                  if locations:
+                      physical = locations[0].get("physicalLocation") or {}
+                      artifact = (physical.get("artifactLocation") or {}).get("uri") or ""
+                      line = (physical.get("region") or {}).get("startLine") or ""
+                      where = f"{artifact}:{line}"
+                  print(f"::error file={where}::{rule} ({level}) {message[:500]}")
+          if failed:
+              sys.exit(1)
+          PY
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: codeql-${{ matrix.language }}
+          path: codeql-results
+          if-no-files-found: error
+          retention-days: 14
+
+  codeql:
+    name: ${{ inputs.check-name }}
+    needs: [detect, analyze]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: none
+    steps:
+      - name: Require analysis to pass
+        env:
+          DETECT_RESULT: ${{ needs.detect.result }}
+          ANALYZE_RESULT: ${{ needs.analyze.result }}
+        run: |
+          set -euo pipefail
+          if [ "$DETECT_RESULT" != "success" ]; then
+            echo "::error::CodeQL language detection failed"
+            exit 1
+          fi
+          case "$ANALYZE_RESULT" in
+            success)
+              echo "CodeQL passed."
+              ;;
+            skipped)
+              echo "::notice title=CodeQL::No supported languages were detected, so analysis did not run."
+              ;;
+            *)
+              echo "::error::CodeQL analysis failed"
+              exit 1
+              ;;
+          esac

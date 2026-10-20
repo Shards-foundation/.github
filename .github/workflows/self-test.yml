@@ -1,0 +1,179 @@
+# Proves the reusable workflows in this repository.
+# Local jobs lint the workflow files. The other jobs call the reusable workflows
+# against fixtures in this repo. Nothing is marked continue-on-error.
+
+name: CI baseline self-test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    name: Workflow policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check action pins and workflow policy
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/check_workflows.py
+          python3 scripts/ci/check_workflows.py --self-test
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install shellcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          bash scripts/ci/install_actionlint.sh
+
+      - name: Lint workflows and templates
+        run: |
+          set -euo pipefail
+          actionlint -color
+          actionlint -color workflow-templates/*.yml
+
+  negative-gates:
+    name: Negative gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Prove coverage and secret gates fail closed
+        run: |
+          set -euo pipefail
+          bash scripts/ci/negative_gates.sh
+
+  python-ci:
+    name: Call Python CI fixture
+    permissions:
+      contents: read
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      working-directory: fixtures/python-app
+      python-versions: '["3.12","3.13"]'
+      coverage-threshold: 80
+      coverage-packages: sample_widget
+      require-tests: true
+      check-name: Python CI fixture
+
+  python-ci-coverage-off:
+    name: Call Python CI coverage off
+    permissions:
+      contents: read
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      working-directory: fixtures/python-low-cov
+      python-versions: '["3.12"]'
+      coverage-threshold: 0
+      require-tests: true
+      check-name: Python CI coverage off
+
+  node-npm:
+    name: Call Node CI npm
+    permissions:
+      contents: read
+    uses: ./.github/workflows/node-ci.yml
+    with:
+      working-directory: fixtures/node-npm
+      node-versions: '["20","22"]'
+      package-manager: npm
+      require-tests: true
+      check-name: Node CI npm
+
+  node-pnpm:
+    name: Call Node CI pnpm
+    permissions:
+      contents: read
+    uses: ./.github/workflows/node-ci.yml
+    with:
+      working-directory: fixtures/node-pnpm
+      node-versions: '["22"]'
+      package-manager: pnpm
+      require-tests: true
+      check-name: Node CI pnpm
+
+  gitleaks:
+    name: Call Gitleaks
+    permissions:
+      contents: read
+    uses: ./.github/workflows/gitleaks.yml
+
+  dependency-review:
+    name: Call Dependency review
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dependency-review.yml
+
+  codeql:
+    name: Call CodeQL
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      packages: read
+    uses: ./.github/workflows/codeql.yml
+
+  scorecard:
+    name: Call OpenSSF Scorecard
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      security-events: write
+    uses: ./.github/workflows/scorecard.yml
+
+  release-please:
+    name: Call Release Please dry run
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    uses: ./.github/workflows/release-please.yml
+    with:
+      dry-run: true
+      release-type: simple
+      check-name: Release Please dry run

@@ -1,0 +1,183 @@
+# Blocks pull requests that introduce a dependency with a known vulnerability.
+# The job is skipped outside pull_request because the GitHub API compares the PR diff.
+# The aggregator stays green on that skip so a required check can include it.
+# warn-only is intentionally unset: a vulnerable dependency fails the check.
+# When the dependency graph is off, the compare API returns HTTP 403 Forbidden.
+# That case records a notice and does not fail the check. A real vulnerability
+# still fails once the graph can be compared. Fork pull requests are not skipped.
+
+name: Dependency review
+
+on:
+  workflow_call:
+    inputs:
+      check-name:
+        description: Stable check name for branch protection.
+        required: false
+        type: string
+        default: Dependency review
+      fail-on-severity:
+        description: Lowest severity that fails the check. Empty fails on any known vulnerability.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.repository }}-${{ github.ref }}-${{ inputs.check-name }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: dependency diff
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      supported: ${{ steps.graph.outputs.supported }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check whether the dependency graph can be compared
+        id: graph
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          set -euo pipefail
+          body="${RUNNER_TEMP}/dependency-graph-body.txt"
+          status="$(curl -sS -o "$body" -w "%{http_code}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}")"
+          python3 - "$status" "$body" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          status = sys.argv[1]
+          raw = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
+          fork = os.environ.get("HEAD_IS_FORK", "false").lower() == "true"
+          try:
+              payload = json.loads(raw) if raw.strip() else {}
+          except json.JSONDecodeError:
+              payload = {}
+          message = str(payload.get("message") or "") if isinstance(payload, dict) else ""
+          docs = str(payload.get("documentation_url") or "") if isinstance(payload, dict) else ""
+          lower = message.lower()
+          out = pathlib.Path(os.environ["GITHUB_OUTPUT"])
+
+          def show(text):
+              safe = text.replace("\r", " ").replace("\n", " ").replace("::", ": :")
+              print(safe[:2000])
+
+          def finish(supported, notice=None):
+              with out.open("a", encoding="utf-8") as handle:
+                  handle.write(f"supported={supported}\n")
+              if notice:
+                  print(f"::notice title=Dependency review::{notice}")
+              sys.exit(0)
+
+          def fail(text):
+              print(f"::error::{text}")
+              show(raw)
+              sys.exit(1)
+
+          if status == "200":
+              finish("true")
+          if "resource not accessible by integration" in lower:
+              fail(
+                  f"Dependency review API rejected the token (HTTP {status}). This is not a disabled dependency graph."
+              )
+          graph_disabled = "dependency graph" in lower and any(
+              word in lower for word in ("disabled", "not enabled", "not supported")
+          )
+          bare_forbidden = (
+              lower.strip() == "forbidden"
+              and "dependency-graph/dependency-review" in docs
+          )
+          ghas_disabled = "advanced security" in lower and any(
+              word in lower for word in ("not enabled", "must be enabled", "disabled")
+          )
+          if status == "403" and not fork and (graph_disabled or bare_forbidden or ghas_disabled):
+              finish(
+                  "false",
+                  "Dependency graph is not enabled, so this pull request was not compared. "
+                  "The check is unverified until an owner enables the dependency graph. "
+                  "A known-vulnerable dependency fails the check once comparison succeeds.",
+              )
+          if status == "403" and fork:
+              fail(
+                  "Dependency review API returned HTTP 403 for a fork pull request. The comparison was not skipped."
+              )
+          fail(f"Could not tell whether dependency review can run (HTTP {status}).")
+          PY
+
+      - name: Review dependency changes
+        if: steps.graph.outputs.supported == 'true' && inputs.fail-on-severity == ''
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          comment-summary-in-pr: never
+          show-openssf-scorecard: false
+          retry-on-snapshot-warnings: true
+          fail-on-scopes: runtime,development,unknown
+
+      - name: Review dependency changes at a severity floor
+        if: steps.graph.outputs.supported == 'true' && inputs.fail-on-severity != ''
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          comment-summary-in-pr: never
+          show-openssf-scorecard: false
+          retry-on-snapshot-warnings: true
+          fail-on-scopes: runtime,development,unknown
+          fail-on-severity: ${{ inputs.fail-on-severity }}
+
+  dependency-review:
+    name: ${{ inputs.check-name }}
+    needs: review
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: none
+    steps:
+      - name: Record the review result
+        env:
+          RESULT: ${{ needs.review.result }}
+          SUPPORTED: ${{ needs.review.outputs.supported }}
+        run: |
+          set -euo pipefail
+          case "$RESULT" in
+            success)
+              case "$SUPPORTED" in
+                true)
+                  echo "Dependency review passed."
+                  ;;
+                false)
+                  echo "::notice title=Dependency review::Dependency graph is not enabled, so no dependency diff was compared. This remains unverified until an owner enables the dependency graph. A known vulnerability fails this check once comparison succeeds."
+                  ;;
+                *)
+                  echo "::error::Dependency review did not record whether the dependency graph is enabled."
+                  exit 1
+                  ;;
+              esac
+              ;;
+            skipped)
+              echo "::notice title=Dependency review::Skipped because this run is not a pull_request. Vulnerable dependency diffs fail this check on pull requests."
+              ;;
+            *)
+              echo "::error::Dependency review failed"
+              exit 1
+              ;;
+          esac

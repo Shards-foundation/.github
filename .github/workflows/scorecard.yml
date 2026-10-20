@@ -1,0 +1,149 @@
+# OpenSSF Scorecard. A failure to run the analysis fails the job.
+# A low score does not fail CI: several checks only turn green after the org
+# owner enables branch protection and token settings, which would deadlock a
+# required check. Results are uploaded to code scanning when that feature is on.
+# HTTP 404 with message "no analysis found" means code scanning is enabled and
+# empty. Keep that classification in sync with codeql.yml.
+
+name: OpenSSF Scorecard
+
+on:
+  workflow_call:
+    inputs:
+      check-name:
+        description: Stable check name for branch protection.
+        required: false
+        type: string
+        default: OpenSSF Scorecard
+    secrets:
+      repo-token:
+        description: Optional PAT for private repositories. Leave unset to use the workflow token. Never logged.
+        required: false
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+  security-events: write
+
+concurrency:
+  group: scorecard-${{ github.repository }}-${{ github.ref }}-${{ inputs.check-name }}
+  cancel-in-progress: true
+
+jobs:
+  scorecard:
+    name: ${{ inputs.check-name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          repo_token: ${{ secrets.repo-token || github.token }}
+          publish_results: ${{ (github.event_name == 'push' || github.event_name == 'schedule') && github.ref_name == github.event.repository.default_branch && github.event.repository.private == false }}
+
+      - name: Require a SARIF result
+        run: |
+          set -euo pipefail
+          if [ ! -s results.sarif ]; then
+            echo "::error::Scorecard did not write results.sarif"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("results.sarif").read_text(encoding="utf-8"))
+          runs = data.get("runs") or []
+          if not runs:
+              raise SystemExit("::error::Scorecard SARIF has no runs")
+          print(f"Scorecard wrote {len(runs)} SARIF run(s)")
+          PY
+
+      - name: Upload Scorecard artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check whether code scanning is enabled
+        id: features
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NOTICE_DISABLED: Code scanning is not enabled. The Scorecard SARIF artifact is still available on this run.
+          NOTICE_EMPTY: Code scanning is enabled and has no analyses yet. This job will upload its SARIF.
+        run: |
+          set -euo pipefail
+          body="${RUNNER_TEMP}/code-scanning-body.txt"
+          status="$(curl -sS -o "$body" -w "%{http_code}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/code-scanning/alerts?per_page=1")"
+          python3 - "$status" "$body" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          status = sys.argv[1]
+          raw = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
+          try:
+              payload = json.loads(raw) if raw.strip() else {}
+          except json.JSONDecodeError:
+              payload = {}
+          message = str(payload.get("message") or "") if isinstance(payload, dict) else ""
+          lower = message.lower()
+          out = pathlib.Path(os.environ["GITHUB_OUTPUT"])
+
+          def show(text):
+              safe = text.replace("\r", " ").replace("\n", " ").replace("::", ": :")
+              print(safe[:2000])
+
+          def set_enabled(value, notice=None):
+              with out.open("a", encoding="utf-8") as handle:
+                  handle.write(f"enabled={value}\n")
+              if notice:
+                  print(f"::notice title=Code scanning::{notice}")
+
+          if "resource not accessible by integration" in lower:
+              print(f"::error::Code scanning API rejected the token (HTTP {status}).")
+              show(raw)
+              sys.exit(1)
+          if status == "200" or (status == "404" and lower == "no analysis found"):
+              notice = os.environ["NOTICE_EMPTY"] if status == "404" else None
+              set_enabled("true", notice)
+              sys.exit(0)
+          disabled = (
+              "code scanning is not enabled",
+              "code security must be enabled",
+              "advanced security",
+              "not enabled for this repository",
+          )
+          if status in {"403", "404"} and any(marker in lower for marker in disabled):
+              set_enabled("false", os.environ["NOTICE_DISABLED"])
+              sys.exit(0)
+          print(f"::error::Could not tell whether code scanning is enabled (HTTP {status}).")
+          show(raw)
+          sys.exit(1)
+          PY
+
+      - name: Upload Scorecard SARIF to code scanning
+        if: steps.features.outputs.enabled == 'true'
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: results.sarif
+          category: scorecard

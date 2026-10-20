@@ -1,0 +1,11 @@
+{
+  "name": "Shards Node CI",
+  "description": "Install with pnpm or npm, then lint, type-check, build, and test the scripts that the package actually defines.",
+  "iconName": "beaker",
+  "categories": ["JavaScript", "Continuous integration"],
+  "filePatterns": [
+    "package\\.json$",
+    "pnpm-lock\\.yaml$",
+    "package-lock\\.json$"
+  ]
+}

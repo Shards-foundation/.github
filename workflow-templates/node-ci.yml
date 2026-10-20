@@ -1,0 +1,27 @@
+# Caller for the org Node.js / TypeScript CI workflow.
+# auto selects pnpm when packageManager or pnpm-lock.yaml says so, otherwise npm.
+
+name: Node CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-ci:
+    name: Node CI
+    permissions:
+      contents: read
+    uses: Shards-foundation/.github/.github/workflows/node-ci.yml@main
+    with:
+      node-versions: '["20","22"]'
+      package-manager: auto
