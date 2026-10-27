@@ -128,14 +128,14 @@ jobs:
 
       - name: Initialize CodeQL
         if: inputs.queries == ''
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ (matrix.language == 'python' || matrix.language == 'javascript-typescript' || matrix.language == 'javascript' || matrix.language == 'typescript' || matrix.language == 'ruby' || matrix.language == 'actions') && 'none' || 'autobuild' }}
 
       - name: Initialize CodeQL with extra queries
         if: inputs.queries != ''
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ (matrix.language == 'python' || matrix.language == 'javascript-typescript' || matrix.language == 'javascript' || matrix.language == 'typescript' || matrix.language == 'ruby' || matrix.language == 'actions') && 'none' || 'autobuild' }}
@@ -204,7 +204,7 @@ jobs:
           PY
 
       - name: Analyze
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: codeql-${{ matrix.language }}
           output: ${{ github.workspace }}/codeql-results
