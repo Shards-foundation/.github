@@ -27,7 +27,7 @@ Shards-foundation is actively developing a suite of interconnected projects that
 
 ### Foundational Infrastructure & Control
 
-*   **kernels**: Deterministic Control Planes for AI Systems, providing the underlying logic and execution environment for autonomous operations.
+*   **[Shards-Kernel](https://github.com/Shards-foundation/Shards-kernel)**: Deterministic control-plane infrastructure for AI systems, governing execution, verification, and auditability of autonomous operations.
 *   **Kloc-kernel-level-oversight-council**: A kernel-level oversight council ensuring the integrity and secure operation of our autonomous systems.
 *   **PATENT-OS**: Initiating autonomous IP discovery sequences, leveraging AI for intellectual property management and innovation.
 
