@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/shards-inc-animated.gif" alt="Animated Shards Inc logo" width="620" />
+<img src="https://raw.githubusercontent.com/Shards-foundation/.github/main/profile/assets/shards-inc-animated.gif" alt="Animated Shards Inc logo" width="620" />
 
 # Shards Foundation
 
