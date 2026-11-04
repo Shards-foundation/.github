@@ -1,65 +1,95 @@
-# Shards-foundation: Pioneering Autonomous Intelligence
+<div align="center">
 
-## Vision
+<img src="assets/shards-inc-animated.gif" alt="Animated Shards Inc logo" width="620" />
 
-Shards-foundation is dedicated to advancing the frontier of autonomous intelligence. Our mission is to engineer sophisticated AI systems and foundational infrastructure that drive innovation across various domains, from advanced agentic architectures to robust operational control planes. We believe in a future where intelligent systems seamlessly integrate to solve complex challenges, enhance human capabilities, and foster a new era of technological empowerment.
+# Shards Foundation
 
-## Core Principles
+**Open-source infrastructure for governable autonomous AI.**
 
-Our work is guided by a set of unwavering principles:
+*Deterministic control · Agent orchestration · Practical automation*
 
-*   **Autonomy**: Developing self-governing systems capable of independent decision-making and action.
-*   **Intelligence**: Crafting AI that exhibits advanced reasoning, learning, and adaptive capabilities.
-*   **Scalability**: Designing architectures that can grow and evolve to meet the demands of enterprise-grade applications.
-*   **Security**: Ensuring the integrity, privacy, and resilience of all our systems.
-*   **Interoperability**: Building modular components that seamlessly integrate within a broader ecosystem.
+[Explore repositories](https://github.com/orgs/Shards-foundation/repositories) · [Shards-Kernel](https://github.com/Shards-foundation/Shards-kernel) · [PyPI package](https://pypi.org/project/shards-kernel/)
 
-## Key Initiatives & Projects
-
-Shards-foundation is actively developing a suite of interconnected projects that collectively form a powerful ecosystem for autonomous intelligence. Below are some of our flagship initiatives:
-
-### AI Agents & Orchestration
-
-*   **super-intelligence-agent**: An enterprise-grade super-intelligence autonomous agentic AI system integrating multiple LLM providers and agent frameworks.
-*   **swarm-agent**: A sophisticated agent designed for distributed, collaborative intelligence, enabling complex task execution through coordinated actions.
-*   **omni-llm-orchestrator**: A production-ready orchestration layer that unifies 12 LLM families with intelligent weighted routing and synthesis.
-*   **Llm**: Our core ORLLM (Orchestrated Reasoning Large Language Model) project, focusing on advanced language understanding and generation.
-
-### Foundational Infrastructure & Control
-
-*   **[Shards-Kernel](https://github.com/Shards-foundation/Shards-kernel)**: Deterministic control-plane infrastructure for AI systems, governing execution, verification, and auditability of autonomous operations.
-*   **Kloc-kernel-level-oversight-council**: A kernel-level oversight council ensuring the integrity and secure operation of our autonomous systems.
-*   **PATENT-OS**: Initiating autonomous IP discovery sequences, leveraging AI for intellectual property management and innovation.
-
-### Applications & Solutions
-
-*   **shards-workflow-hub**: An Autonomous Business Operations Platform that orchestrates workflows across 49 MCP connectors, 13 AI models, and Stripe payments.
-*   **saas-platform-mcp-demo**: A comprehensive SaaS platform demonstrating 18 MCP service integrations, showcasing the versatility of our ecosystem.
-*   **revenue-engine**: An autonomous revenue generation system with AI-powered content creation, dual payment gateways (Stripe/PayPal), and automated fulfillment.
-*   **Lumina-**: An e-commerce platform demonstrating advanced frontend and backend capabilities.
-*   **Rag**: A knowledge hub built with TypeScript, focusing on efficient information retrieval and management.
-*   **Components-library**: A reusable React JS/TS, HTML, CSS, and Tailwind component library for consistent UI/UX across our applications.
-*   **Cosmos--motion-explorer-**: A Universe Explorer Simulator, showcasing advanced visualization and interactive capabilities.
-
-### Automation & Playbooks
-
-*   **shards-playbooks**: Autonomous playbooks and automation workflows for the Shards Ecosystem, streamlining operational processes and enhancing efficiency.
-
-## Technology Stack
-
-Our projects primarily leverage cutting-edge technologies to ensure robustness, scalability, and performance:
-
-*   **Programming Languages**: TypeScript, Python, JavaScript
-*   **Frameworks & Libraries**: React, Node.js, Vite, Flask, PostgreSQL
-*   **AI/ML**: Multiple LLM providers, custom agent frameworks
-*   **DevOps**: GitHub Actions for CI/CD
-
-## Contributing
-
-Shards-foundation welcomes contributions from experts and enthusiasts alike. We believe in collaborative innovation to push the boundaries of AI. Please refer to individual repository guidelines for specific contribution instructions.
-
-## Contact & Community
-
-For inquiries or to join our community, please reach out via our GitHub discussions or directly through the organization contact information. We are always looking for talented individuals to join our journey in building the future of autonomous intelligence.
+</div>
 
 ---
+
+## What we're building
+
+Shards Foundation is the open-source engineering home for the wider Shards ecosystem. Our work explores how AI agents can operate usefully **without treating model output as permission to act**.
+
+The direction is deliberately modular: agent runtimes, orchestration, policy-controlled execution, audit trails, retrieval, and applications that can use those foundations. Projects are at different levels of maturity; a repository's design or roadmap does **not** imply that its integrations have been deployed.
+
+## Featured projects
+
+### Control, governance and agent infrastructure
+
+| Project | Focus | Status / scope |
+| --- | --- | --- |
+| **[Shards-Kernel](https://github.com/Shards-foundation/Shards-kernel)** | Python package providing deterministic execution decisions, scoped permits and hash-chained audit evidence. | **Published on [PyPI](https://pypi.org/project/shards-kernel/)**; local reference operations, not a general-purpose OS or sandbox. |
+| **[Shards Agent Core](https://github.com/Shards-foundation/shards-agent-core)** | Modular Python agent runtime, specialist agents and workflow coordination. | Framework and integration work. |
+| **[Shards Swarm Agent](https://github.com/Shards-foundation/Shards-Swarm-Agent)** | Multi-agent registration, task coordination, workflow and monitoring prototype. | **Alpha**; not production-ready. |
+| **[Super-Intelligence Agent](https://github.com/Shards-foundation/Shards-Super-Intelligence-Agent)** | Multi-provider agent framework experiments and local API scaffold. | **Experimental**; not a deployed service. |
+| **[AgentMesh](https://github.com/Shards-foundation/AgentMesh)** | Architecture for connecting agent swarms and messaging-platform bot networks. | Integration-oriented project. |
+
+### AI platforms, data and automation
+
+| Project | Focus |
+| --- | --- |
+| **[Omni-LLM Orchestrator](https://github.com/Shards-foundation/omni-llm-orchestrator)** | Intent-aware multi-model routing, weighted response synthesis and chat UI. |
+| **[Shards RAG](https://github.com/Shards-foundation/Shards-Rag)** | Enterprise document retrieval and AI knowledge-hub application. |
+| **[Workflow Hub](https://github.com/Shards-foundation/shards-workflow-hub)** | Business operations, connected tools and workflow orchestration. |
+| **[Shards Playbooks](https://github.com/Shards-foundation/shards-playbooks)** | Reusable operational workflows, automation patterns and engineering guidance. |
+| **[Revenue Engine](https://github.com/Shards-foundation/Shards-Revenue-Engine)** | Early-stage digital-product, payment and fulfilment automation. **Alpha**, not a live commercial service. |
+
+### Research and specialised applications
+
+| Project | Focus |
+| --- | --- |
+| **[Shards Agent Trading Network](https://github.com/Shards-foundation/Shards-Agent-Trading-Network)** | Agent profiles, verifiable journals, read-only market data and simulated paper execution. **Live trading is disabled.** |
+| **[PATENT-OS](https://github.com/Shards-foundation/PATENT-OS)** | AI-supported patent and prior-art research. Not legal advice. |
+| **[Nexus Components Library](https://github.com/Shards-foundation/Components-library)** | React component library and AI-assisted UI playground. |
+| **[Lumina](https://github.com/Shards-foundation/Lumina)** | Headless commerce application and integration patterns. |
+| **[AI Agent Sketchbook](https://github.com/Shards-foundation/ai-agent-sketchbook)** | Planning, prototyping and governance-oriented agent workspace. |
+
+## Start here: Shards-Kernel
+
+[![PyPI](https://img.shields.io/pypi/v/shards-kernel?label=shards-kernel%20on%20PyPI)](https://pypi.org/project/shards-kernel/)
+[![CI](https://github.com/Shards-foundation/Shards-kernel/actions/workflows/ci.yml/badge.svg)](https://github.com/Shards-foundation/Shards-kernel/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-orange)](https://github.com/Shards-foundation/Shards-kernel/blob/main/LICENSE)
+
+Shards-Kernel separates an agent's **proposed action** from an **authorised action**. It provides a concrete starting point for exploring fail-closed decisions, permits and audit evidence.
+
+```bash
+python -m pip install shards-kernel
+shards-kernel --version
+shards-kernel demo --json
+```
+
+The demo runs local reference tools. It **does not** connect an agent to GitHub, wallets, trading venues or infrastructure by itself. For supported commands and integration boundaries, see the [package README](https://github.com/Shards-foundation/Shards-kernel#readme) and [agent quickstart](https://github.com/Shards-foundation/Shards-kernel/blob/main/docs/AGENT_QUICKSTART.md).
+
+## How the pieces relate
+
+```text
+Applications & operator interfaces
+           |
+Agent runtimes / orchestration
+           |
+Policy, permissions & audit boundary  <-- Shards-Kernel
+           |
+Trusted tool adapters / APIs / data
+           |
+      External systems
+```
+
+**This is the intended architectural direction, not a claim that every linked repository already integrates with Shards-Kernel.** An actual deployment needs its own authentication, isolation, secrets management, monitoring, operational controls and testing.
+
+## Contribute
+
+The repositories are public so developers can inspect the implementation, evaluate design decisions and propose improvements. Start with a project's README, check its licence and contribution guidelines, and open an **issue or pull request in that repository**.
+
+- [Browse all public repositories](https://github.com/orgs/Shards-foundation/repositories)
+- [Shards-Kernel issues](https://github.com/Shards-foundation/Shards-kernel/issues)
+- [Foundation GitHub profile source](https://github.com/Shards-foundation/.github/blob/main/profile/README.md)
+
+<sub>Shards Foundation · Building useful autonomous systems with explicit boundaries.</sub>
