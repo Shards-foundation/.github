@@ -88,7 +88,8 @@ def check_showcase(markdown: str) -> str:
         raise AssertionError("Poster link and watch link must target the same video")
     if not urlparse(image_url).netloc or not urlparse(watch_target).netloc:
         raise AssertionError("Public showcase URLs must have valid HTTPS hostnames")
-    if "drive.google.com" in urlparse(watch_target).netloc:
+    hostname = urlparse(watch_target).hostname
+    if hostname == "drive.google.com" or (hostname and hostname.endswith(".drive.google.com")):
         raise AssertionError("Drive links need independent permission verification")
     return "public"
 
