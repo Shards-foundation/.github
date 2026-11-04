@@ -8,9 +8,22 @@
 
 *Deterministic control · Agent orchestration · Practical automation*
 
+[![Profile views](https://komarev.com/ghpvc/?username=Shards-foundation&label=Profile%20views&color=ef8d32&style=flat-square)](https://github.com/Shards-foundation)
+[![GitHub followers](https://img.shields.io/github/followers/Shards-foundation?label=Followers&logo=github&style=flat-square&color=ef8d32)](https://github.com/orgs/Shards-foundation/followers)
+
 [Explore repositories](https://github.com/orgs/Shards-foundation/repositories) · [Shards-Kernel](https://github.com/Shards-foundation/Shards-kernel) · [PyPI package](https://pypi.org/project/shards-kernel/)
 
 </div>
+
+---
+
+## Shards in motion
+
+[![Watch the Shards AI showcase](https://raw.githubusercontent.com/Shards-foundation/.github/main/profile/assets/shards-inc-animated.gif)](https://drive.google.com/file/d/1QTJfvygA6Kj7hTXhZ-dhfFuwEw8tc09J/view)
+
+**[▶ Watch the 15-second Shards AI showcase](https://drive.google.com/file/d/1QTJfvygA6Kj7hTXhZ-dhfFuwEw8tc09J/view)**
+
+*Video preview link: Google Drive. Public access to the uploaded clip is not yet enabled; viewers may be asked to request access. The artwork above is the organisation logo, not a frame from the video.*
 
 ---
 
