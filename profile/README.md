@@ -19,9 +19,15 @@
 
 ## Shards in motion
 
-**Video showcase — publication pending.**
+<div align="center">
 
-Our 15-second SHARDS INC brand video has been prepared for this profile. The uploaded MP4 is currently held privately in Google Drive and is accessible only to the owner or explicitly authorised viewers, so no public playback link is shown here until hosting is ready.
+[![Watch Shards showcase](https://raw.githubusercontent.com/Shards-foundation/.github/main/profile/assets/shards-showcase.gif)](https://raw.githubusercontent.com/Shards-foundation/.github/main/profile/assets/shards-showcase.mp4)
+
+[▶ Watch the video](https://raw.githubusercontent.com/Shards-foundation/.github/main/profile/assets/shards-showcase.mp4)
+
+*15-second SHARDS INC showcase · tap to watch the full video with audio.*
+
+</div>
 
 ## What we're building
 
