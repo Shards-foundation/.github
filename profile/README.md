@@ -19,13 +19,9 @@
 
 ## Shards in motion
 
-[![Watch the Shards AI showcase](https://raw.githubusercontent.com/Shards-foundation/.github/main/profile/assets/shards-inc-animated.gif)](https://drive.google.com/file/d/1QTJfvygA6Kj7hTXhZ-dhfFuwEw8tc09J/view)
+**Video showcase — publication pending.**
 
-**[▶ Watch the 15-second Shards AI showcase](https://drive.google.com/file/d/1QTJfvygA6Kj7hTXhZ-dhfFuwEw8tc09J/view)**
-
-*Video preview link: Google Drive. Public access to the uploaded clip is not yet enabled; viewers may be asked to request access. The artwork above is the organisation logo, not a frame from the video.*
-
----
+Our 15-second SHARDS INC brand video has been prepared for this profile. The uploaded MP4 is currently held privately in Google Drive and is accessible only to the owner or explicitly authorised viewers, so no public playback link is shown here until hosting is ready.
 
 ## What we're building
 
