@@ -35,6 +35,7 @@ jobs:
           set -euo pipefail
           python3 scripts/ci/check_workflows.py
           python3 scripts/ci/check_workflows.py --self-test
+          python3 -m unittest discover -s tests -p "test_profile_readme.py" -v
 
   actionlint:
     name: actionlint
