@@ -78,7 +78,7 @@ def check_showcase(markdown: str) -> str:
         r"\((https://[^)\s]+)\)",
         section, re.IGNORECASE,
     )
-    watch = re.search(r"\[(?:▶\s*)?Watch[^\]]+\]\((https://[^)\s]+)\)", section, re.IGNORECASE)
+    watch = re.search(r"(?<!!)\[(?:▶\s*)?Watch[^\]]+\]\((https://[^)\s]+)\)", section, re.IGNORECASE)
     if not poster or not watch:
         raise AssertionError("Public showcase must provide a linked image and a watch link")
 
