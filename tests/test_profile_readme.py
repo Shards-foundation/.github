@@ -150,6 +150,27 @@ class ProfileReadmeTests(unittest.TestCase):
                 "Watch the video](https://example.org/wrong.mp4)",
             ))
 
+    def test_public_showcase_commits_real_animation_and_video(self) -> None:
+        if check_showcase(self.readme) != "public":
+            self.skipTest("Showcase remains private; no public media files required")
+
+        animation = ROOT / "profile" / "assets" / "shards-showcase.gif"
+        video = ROOT / "profile" / "assets" / "shards-showcase.mp4"
+        self.assertTrue(animation.is_file(), "Public preview GIF must be committed")
+        self.assertTrue(video.is_file(), "Public playable MP4 must be committed")
+        self.assertGreater(animation.stat().st_size, 100_000)
+        self.assertGreater(video.stat().st_size, 100_000)
+
+        with animation.open("rb") as gif_handle:
+            self.assertIn(gif_handle.read(6), (b"GIF87a", b"GIF89a"))
+        with video.open("rb") as mp4_handle:
+            self.assertEqual(mp4_handle.read(12)[4:8], b"ftyp")
+
+        base = "https://raw.githubusercontent.com/Shards-foundation/.github/main/profile/assets/"
+        section = showcase_section(self.readme)
+        self.assertIn(base + "shards-showcase.gif", section)
+        self.assertGreaterEqual(section.count(base + "shards-showcase.mp4"), 2)
+
     def test_all_featured_repository_links_remain(self) -> None:
         for name in FEATURED_REPOS:
             with self.subTest(repo=name):
