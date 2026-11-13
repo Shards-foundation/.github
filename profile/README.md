@@ -107,4 +107,14 @@ The repositories are public so developers can inspect the implementation, evalua
 - [Shards-Kernel issues](https://github.com/Shards-foundation/Shards-kernel/issues)
 - [Foundation GitHub profile source](https://github.com/Shards-foundation/.github/blob/main/profile/README.md)
 
+## Support Shards
+
+Support the wider Shards ecosystem, including open-source projects, developer tools and ongoing development. Contributions are voluntary.
+
+<div align="center">
+
+<a href="https://www.paypal.com/ncp/payment/PLB-FL23DP5NGC4S"><img src="https://img.shields.io/badge/Support%20Shards-PayPal-003087?style=for-the-badge&logo=paypal&logoColor=white" alt="Support Shards via PayPal" height="40" /></a>
+
+</div>
+
 <sub>Shards Foundation · Building useful autonomous systems with explicit boundaries.</sub>
