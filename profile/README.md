@@ -114,6 +114,7 @@ Support the wider Shards ecosystem, including open-source projects, developer to
 <div align="center">
 
 <a href="https://www.paypal.com/ncp/payment/PLB-FL23DP5NGC4S"><img src="https://img.shields.io/badge/Support%20Shards-PayPal-003087?style=for-the-badge&logo=paypal&logoColor=white" alt="Support Shards via PayPal" height="40" /></a>
+<a href="https://buymeacoffee.com/shardsinc"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=000000" alt="Support Shards on Buy Me a Coffee" height="40" /></a>
 
 </div>
 
