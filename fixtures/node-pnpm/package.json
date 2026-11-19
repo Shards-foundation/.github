@@ -13,7 +13,7 @@
     "test": "tsc --pretty false && node --test test/index.test.js"
   },
   "devDependencies": {
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "packageManager": "pnpm@10.4.1"
 }
