@@ -126,7 +126,7 @@ jobs:
 
       - name: Review dependency changes
         if: steps.graph.outputs.supported == 'true' && inputs.fail-on-severity == ''
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
         with:
           comment-summary-in-pr: never
           show-openssf-scorecard: false
@@ -135,7 +135,7 @@ jobs:
 
       - name: Review dependency changes at a severity floor
         if: steps.graph.outputs.supported == 'true' && inputs.fail-on-severity != ''
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
         with:
           comment-summary-in-pr: never
           show-openssf-scorecard: false
